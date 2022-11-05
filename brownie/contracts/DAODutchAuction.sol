@@ -53,8 +53,7 @@ contract DAODutchAuction is BN128, Encryption {
 
     struct Result {
         uint256 maxPrice;
-        uint256 filledAtPrice;
-        uint256 totalBidAtPrice;
+        uint256 totalBid;   // TODO: This storage variable is unecessary, but it makes the logic easier
     }
 
     constructor(address[] memory _auctioneers, uint256 _bidClosingTime) {
@@ -79,6 +78,10 @@ contract DAODutchAuction is BN128, Encryption {
         uint256 symKey = _sharedKey(_bid.bidderPublicKey);
         bidAmount = decrypt(_bid.encryptedBidAmount, symKey);
         maxPrice = decrypt(_bid.encryptedMaxPrice, symKey);
+    }
+
+    function getBidderPublicKey(address bidder) external view returns (uint256[2] memory) {
+        return bids[bidder].bidderPublicKey;
     }
 
     function isBiddingOpen() public view returns (bool) {
@@ -174,7 +177,7 @@ contract DAODutchAuction is BN128, Encryption {
         // If bidders is empty, reset the buffers
         if (bidders.length == 0) {
             delete postedBids[msg.sender];
-            results[msg.sender] = Result(0,0,0);
+            results[msg.sender] = Result(0,0);
             return;
         }
 
@@ -195,7 +198,7 @@ contract DAODutchAuction is BN128, Encryption {
             nextBid = bids[bidders[i]];
 
             // This prob not needed
-            require(nextBid.sender != bidders[i], "Invalid bid");
+            require(nextBid.sender == bidders[i], "Invalid bid");
 
             // Assert public key has been set
             require(nextBid.bidderPublicKey[0] != 0, "Invalid bid");
@@ -239,17 +242,20 @@ contract DAODutchAuction is BN128, Encryption {
                     require(currentBidMaxPrice >= nextBidMaxPrice, "Results must be in order of decreasing max price");
 
                     // If compared bids have same maxPrice, addresses must be in descending orderj
-                    require(currentBid.sender > nextBid.sender , "Bid sender incorrectly ordered");
+                    if (currentBidMaxPrice == nextBidMaxPrice) {
+                      require(currentBid.sender > nextBid.sender , "Valid Bid: sender incorrectly ordered");
+                    }
                 } else {
                     // If nextBid is invalid
                     // If currentBid is also invalid, senders must be in descending order
                     if (currentBidValid == false) {
-                      require(currentBid.sender > nextBid.sender, "Bid sender incorrectly ordered");
+                      require(currentBid.sender > nextBid.sender, "Invalid Bid: sender incorrectly ordered");
                     }
                 }
 
             }
-            // Else if current bid is not set, we assume nextBid, valid or invalid
+
+            // Whether or not current bid is set, we assume nextBid, valid or invalid
             //  was ordered appropriately and check it on next iteraiton
 
             // Add nextBid.sender to postedBids
@@ -258,29 +264,27 @@ contract DAODutchAuction is BN128, Encryption {
 
             Result memory currentResult = results[msg.sender];
 
-            // Add next bid to results while next bid valid and nextMaxPrice is unchanged or totalbids is less than max price
-            if (
-                nextBidValid && 
-                (nextBidMaxPrice == currentResult.maxPrice 
-                  || (currentResult.totalBidAtPrice + currentResult.filledAtPrice < currentResult.maxPrice)
-                )
+            // If first valid bid, set maxPrice = current max
+            if (nextBidValid && postedBids[msg.sender].length == 1) {
+                currentResult.maxPrice = nextBidMaxPrice;
+                currentResult.totalBid = nextBidAmount;
+            } else if (   // Else, if the next bid is valid and maxPrice same, increment totalBid
+                nextBidValid && currentResult.maxPrice == nextBidMaxPrice
             ) {
 
-                // If next bid has lower maxPrice, increment filledAtPrice, reset totalBidAtprice
-                if (currentResult.maxPrice != nextBidMaxPrice) {
+                currentResult.totalBid += nextBidAmount;
+            } else if (   // Else if next bid valid and maxPrice different, IFF currentResult.totalBid < currentResult.maxPrice
+                nextBidValid && currentResult.maxPrice != nextBidMaxPrice
+            ) {
+                // As long as total bid has not exceeded or equal maxPrice, we keep going
+                if (currentResult.totalBid < currentResult.maxPrice) {
                     currentResult.maxPrice = nextBidMaxPrice;
-                    // Add last bidAtPrice amount to total filled
-                    currentResult.filledAtPrice += currentResult.totalBidAtPrice;
-                    // Reset totalBidAtPrice to nextBidAmount
-                    currentResult.totalBidAtPrice = nextBidAmount;
-                } else {
-                    // If nextBid has same maxPrice, just increment totalBidAtPrice
-                    currentResult.totalBidAtPrice += nextBidAmount;
+                    currentResult.totalBid += nextBidAmount;
                 }
-
-                // Update result
-                results[msg.sender] = currentResult;
             }
+
+            // Update result
+            results[msg.sender] = currentResult;
 
             // Result becomes final once all bids accounted for
             if (postedBids[msg.sender].length == bidCount) {
@@ -289,16 +293,14 @@ contract DAODutchAuction is BN128, Encryption {
                 // TODO: Add reserve scenario
 
                 // handle case where maxPrice isn't exceeded
-                if (currentResult.totalBidAtPrice + currentResult.filledAtPrice < currentResult.maxPrice) {
-                    // maxPrice becomes the total amount bid
-                    currentResult.maxPrice = currentResult.totalBidAtPrice + currentResult.filledAtPrice;
+                if (currentResult.totalBid < currentResult.maxPrice) {
 
-                    // No division of bidders at max price necessary, set equal to filledAtPrice
-                    currentResult.totalBidAtPrice = currentResult.filledAtPrice;
-                } else {
-                    currentResult.filledAtPrice = currentResult.maxPrice - currentResult.filledAtPrice;
+                    // maxPrice becomes the total amount bid
+                    currentResult.maxPrice = currentResult.totalBid;
+
                 }
 
+                results[msg.sender] = currentResult;
                 resultSubmitter = msg.sender;
 
                 // TODO here: (1) Create a DAO with maxPrice shares (2) Send maxPrice funds there
@@ -329,15 +331,12 @@ contract DAODutchAuction is BN128, Encryption {
         if (bidAmount > maxPrice || maxPrice < result.maxPrice || bidAmount > lockedEth[msg.sender]) {
             (bool success, ) = msg.sender.call{value: ethRefund}("");
             require(success, "Failed to send Ether");
-        } else if (maxPrice == result.maxPrice ) {
-            ethRefund = ethRefund * result.filledAtPrice / result.totalBidAtPrice;
+        } else {
+            ethRefund = ethRefund * result.maxPrice / result.totalBid;
             (bool success, ) = msg.sender.call{value: ethRefund}("");
             require(success, "Failed to send Ether");
-            // Handle case where maxPrice is exactly equal to result max. Gets a fractional result
-        } else if (maxPrice < result.maxPrice) {
-            // ethRefund = 0;
-            // Send back to user all ETH tokens, with amount ethRefund
-            // ERC20.transfer()
+
+            // Send ERC20
         }
 
     }

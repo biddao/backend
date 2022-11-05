@@ -1,4 +1,7 @@
-from bidder import generate_bidders
+from random import randrange
+
+from brownie import web3
+from bidder import generate_bidders, decrypt_bids, get_all_bids, rank_bid_result
 from crypto import G1, normalize, multiply
 from crypto import symmetric_key_2D, generate_keypair
 
@@ -84,7 +87,89 @@ def test_bidding(dao_dutch_auction, auctioneers):
     max_price = dao_dutch_auction.decrypt(active_bid[2], sym_key)
     assert bid_amount == bidder.bid_amount
     assert max_price == bidder.max_price
+    print(get_all_bids(dao_dutch_auction.address))
+
+    # Set private key
+    for a in auctioneers:
+        npk = list(normalize(a.public_key))
+        dao_dutch_auction.revealPrivateKey(a.index, a.private_key, {"from": a.address})
+        assert dao_dutch_auction.isBiddingOpen() == False
+
+    print(decrypt_bids(dao_dutch_auction.address))
+    print("ordered bids")
+    print(rank_bid_result(dao_dutch_auction.address, decrypt_bids(dao_dutch_auction.address)))
 
 
-def test_mass_bidding():
-    pass
+def test_bidding_same_max_price(dao_dutch_auction, auctioneers):
+    # Set public keys
+    for a in auctioneers:
+        npk = list(normalize(a.public_key))
+        assert dao_dutch_auction.isBiddingOpen() == False
+        dao_dutch_auction.setPublicKey(a.index, [int(npk[0]), int(npk[1])], {"from": a.address})
+
+    # Generate bidders & bid all same max_price
+    bidders = generate_bidders(dao_dutch_auction.address, 10)
+
+    bid_amount = 100000
+    locked_wei = bid_amount * 2
+    max_price = 1000000
+
+    for bidder in bidders:
+        tx_hash = bidder.bid(bid_amount, max_price, locked_wei)
+
+    # Set private key
+    for a in auctioneers:
+        npk = list(normalize(a.public_key))
+        dao_dutch_auction.revealPrivateKey(a.index, a.private_key, {"from": a.address})
+        assert dao_dutch_auction.isBiddingOpen() == False
+
+    print(decrypt_bids(dao_dutch_auction.address))
+    print("ordered bids")
+    result = rank_bid_result(dao_dutch_auction.address, decrypt_bids(dao_dutch_auction.address))
+    print("realized price", result.realized_price)
+    print("total bids at price", result.total_bid)
+
+    # Test revealing bids
+    bidders = [bid.bidder for bid in result.ordered_bids]
+    dao_dutch_auction.revealAllBids(bidders, {"from": auctioneers[0].address})
+
+    (max_price, total_bid) = dao_dutch_auction.results(auctioneers[0].address)
+    print("realized price", max_price)
+    print("total bids", total_bid)
+
+
+def test_randomized_bids(dao_dutch_auction, auctioneers):
+    # Set public keys
+    for a in auctioneers:
+        npk = list(normalize(a.public_key))
+        assert dao_dutch_auction.isBiddingOpen() == False
+        dao_dutch_auction.setPublicKey(a.index, [int(npk[0]), int(npk[1])], {"from": a.address})
+
+    NUM_BIDS = 20
+    bidders = generate_bidders(dao_dutch_auction.address, NUM_BIDS)
+
+    MAX_PRICE = web3.eth.get_balance(bidders[0].account.address) * 2
+
+    for bidder in bidders:
+        max_price = randrange(0, MAX_PRICE)
+        bid_amount = randrange(0, max_price)
+        cur_baance = web3.eth.get_balance(bidders[0].account.address) * 2
+        locked_wei = min(int(bid_amount), int(cur_baance * 4 / 3))
+        tx_hash = bidder.bid(bid_amount, max_price, locked_wei, skip_assertions=True)
+
+    # Set private key
+    for a in auctioneers:
+        npk = list(normalize(a.public_key))
+        dao_dutch_auction.revealPrivateKey(a.index, a.private_key, {"from": a.address})
+        assert dao_dutch_auction.isBiddingOpen() == False
+
+    result = rank_bid_result(dao_dutch_auction.address, decrypt_bids(dao_dutch_auction.address))
+    bidders = [bid.bidder for bid in result.ordered_bids]
+
+    # Reveal bids
+    dao_dutch_auction.revealAllBids(bidders, {"from": auctioneers[0].address})
+
+    # Check on chain results == local results
+    (realized_price, total_bid) = dao_dutch_auction.results(auctioneers[0].address)
+    assert realized_price == result.realized_price
+    assert total_bid == result.total_bid
