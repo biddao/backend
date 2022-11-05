@@ -64,7 +64,8 @@ contract DAODutchAuction is BN128, Encryption {
         bidClosingTime = _bidClosingTime;
     }
 
-    function _sharedKey(uint256[2] memory publicKey) internal returns (uint256) {
+    // TODO: make this internal
+    function _sharedKey(uint256[2] memory publicKey) public returns (uint256) {
         require(revealedKeys == auctioneers.length, "Master private key not set");
         uint256[2] memory result = bn128_multiply([publicKey[0], publicKey[1], masterSecretKey]);
         return result[0];
@@ -133,7 +134,7 @@ contract DAODutchAuction is BN128, Encryption {
     }
 
     // Can be called more than 1 time technically
-    function bid(uint256 encryptedBidAmount, uint256 encryptedMaxPrice, uint256[2] memory publicKey) public payable {
+    function bid(uint256 encryptedBidAmount, uint256 encryptedMaxPrice, uint256[2] memory _publicKey) public payable {
         require(isBiddingOpen(), "Bidding is not open");
         require(!hasBiddingClosed(), "Bidding has closed");
 
@@ -141,10 +142,10 @@ contract DAODutchAuction is BN128, Encryption {
         lockEth();
 
         // Check that the public key of the bidder is valid
-        require(bn128_is_on_curve(publicKey), "Invalid public key");
+        require(bn128_is_on_curve(_publicKey), "Invalid public key");
 
         // Save bid and increment counter
-        bids[msg.sender] = Bid(msg.sender, encryptedBidAmount, encryptedMaxPrice, publicKey);
+        bids[msg.sender] = Bid(msg.sender, encryptedBidAmount, encryptedMaxPrice, _publicKey);
         bidCount += 1;
     }
 

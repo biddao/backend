@@ -12,6 +12,6 @@ pkgs.mkShell {
     postShellHook = ''
       ./.nix-venv/bin/pip install --quiet -Iv eth-brownie==1.19.1
       ./.nix-venv/bin/pip install --quiet -r ./requirements.txt
-      export PYTHONPATH=$PYTHONPATH:$(pwd)/lib
+      export PYTHONPATH=$PYTHONPATH:$(pwd)/lib:$(pwd)/scripts:$(pwd)/brownie
     '';
 }

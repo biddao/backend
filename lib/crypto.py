@@ -14,6 +14,11 @@ FQ = optimized_bn128_FQ
 keccak_256 = Web3.solidityKeccak
 
 
+def symmetric_key_2D(master_pub_key, priv_key):
+    from py_ecc.bn128 import multiply
+    return multiply(master_pub_key, priv_key)[0]
+
+
 def random_scalar() -> int:
     return secrets.randbelow(CURVE_ORDER)
 
