@@ -40,6 +40,10 @@ contract DAODutchAuction is BN128, Encryption {
     mapping(address => Result) public results;
     address public resultSubmitter;
 
+    event BidSubmitted(address bidder, uint256 encryptedBidAmount, uint256 encryptedMaxPrice, uint256[2] bidderPublicKey);
+    event PublicKeySet(address auctioneer);
+    event PrivateKeyRevealed(address auctioneer);
+
     struct Bid {
         address sender;
         uint256 encryptedBidAmount;
@@ -103,6 +107,8 @@ contract DAODutchAuction is BN128, Encryption {
         // Add public key to master public key
         //  (techincally, this can happen off-chain, but do it here for simplicity)
         masterPublicKey = bn128_add([masterPublicKey[0], masterPublicKey[1], publicKey[0], publicKey[1]]);
+
+        emit PublicKeySet(msg.sender);
     }
 
     function revealPrivateKey(uint256 index, uint256 privKey) public {
@@ -131,6 +137,8 @@ contract DAODutchAuction is BN128, Encryption {
           require(derivedMasterPubKey[0] == masterPublicKey[0], "Invalid master private key");
           require(derivedMasterPubKey[1] == masterPublicKey[1], "Invalid master private key");
         }
+
+        emit PrivateKeyRevealed(msg.sender);
     }
 
     // Can be called more than 1 time technically
@@ -147,6 +155,8 @@ contract DAODutchAuction is BN128, Encryption {
         // Save bid and increment counter
         bids[msg.sender] = Bid(msg.sender, encryptedBidAmount, encryptedMaxPrice, _publicKey);
         bidCount += 1;
+        
+        emit BidSubmitted(msg.sender, encryptedBidAmount, encryptedMaxPrice, _publicKey);
     }
 
     // Can be called more than 1 time
