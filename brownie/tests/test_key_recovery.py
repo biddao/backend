@@ -1,6 +1,6 @@
 from random import randrange
 
-from brownie import web3
+from brownie import web3, TestERC20
 from bidder import generate_bidders, decrypt_bids, get_all_bids, rank_bid_result
 from crypto import G1, normalize, multiply
 from crypto import symmetric_key_2D, generate_keypair
@@ -148,13 +148,18 @@ def test_randomized_bids(dao_dutch_auction, auctioneers):
     NUM_BIDS = 20
     bidders = generate_bidders(dao_dutch_auction.address, NUM_BIDS)
 
+    starting_balances = [
+        web3.eth.get_balance(bidder.account.address)
+        for bidder in bidders
+    ]
+
     MAX_PRICE = web3.eth.get_balance(bidders[0].account.address) * 2
 
     for bidder in bidders:
         max_price = randrange(0, MAX_PRICE)
         bid_amount = randrange(0, max_price)
-        cur_baance = web3.eth.get_balance(bidders[0].account.address) * 2
-        locked_wei = min(int(bid_amount), int(cur_baance * 4 / 3))
+        cur_balance = web3.eth.get_balance(bidders[0].account.address)
+        locked_wei = min(int(bid_amount), int(cur_balance / 3))
         tx_hash = bidder.bid(bid_amount, max_price, locked_wei, skip_assertions=True)
 
     # Set private key
@@ -164,12 +169,25 @@ def test_randomized_bids(dao_dutch_auction, auctioneers):
         assert dao_dutch_auction.isBiddingOpen() == False
 
     result = rank_bid_result(dao_dutch_auction.address, decrypt_bids(dao_dutch_auction.address))
-    bidders = [bid.bidder for bid in result.ordered_bids]
+    bidder_addrs = [bid.bidder for bid in result.ordered_bids]
 
     # Reveal bids
-    dao_dutch_auction.revealAllBids(bidders, {"from": auctioneers[0].address})
+    dao_dutch_auction.revealAllBids(bidder_addrs, {"from": auctioneers[0].address})
 
     # Check on chain results == local results
     (realized_price, total_bid) = dao_dutch_auction.results(auctioneers[0].address)
     assert realized_price == result.realized_price
     assert total_bid == result.total_bid
+
+
+    votes_token = TestERC20.at(dao_dutch_auction.votesToken())
+
+    print("total vote balance", votes_token.balanceOf(dao_dutch_auction.address))
+
+    # Test withdraw
+    for bidder in bidders:
+        current_balance = web3.eth.get_balance(bidder.account.address)
+        transaction = dao_dutch_auction.withdraw({"from": bidder.account.address})
+        print("vote balance", votes_token.balanceOf(bidder.account.address))
+
+    print("total vote balance", votes_token.balanceOf(dao_dutch_auction.address))

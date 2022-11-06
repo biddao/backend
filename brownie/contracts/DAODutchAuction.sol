@@ -4,6 +4,7 @@ pragma solidity 0.8.17;
 
 import "./Encryption.sol";
 import "./BN128.sol";
+import "OpenZeppelin/openzeppelin-contracts@4.7.3/contracts/token/ERC20/presets/ERC20PresetFixedSupply.sol";
 
 contract DAODutchAuction is BN128, Encryption {
     // Mapping of auctioneer to their individual public key
@@ -39,6 +40,7 @@ contract DAODutchAuction is BN128, Encryption {
     mapping(address => address[]) public postedBids;
     mapping(address => Result) public results;
     address public resultSubmitter;
+    address public votesToken;
 
     event BidSubmitted(address bidder, uint256 encryptedBidAmount, uint256 encryptedMaxPrice, uint256[2] bidderPublicKey);
     event PublicKeySet(address auctioneer);
@@ -82,6 +84,13 @@ contract DAODutchAuction is BN128, Encryption {
 
     function getBidderPublicKey(address bidder) external view returns (uint256[2] memory) {
         return bids[bidder].bidderPublicKey;
+    }
+
+    function getIndex(address auctioneer) external view returns (uint256) {
+        for (uint256 i = 0; i < auctioneers.length; i++) {
+            if (auctioneers[i] == auctioneer) return i;
+        }
+        revert();
     }
 
     function isBiddingOpen() public view returns (bool) {
@@ -304,6 +313,7 @@ contract DAODutchAuction is BN128, Encryption {
                 resultSubmitter = msg.sender;
 
                 // TODO here: (1) Create a DAO with maxPrice shares (2) Send maxPrice funds there
+                votesToken = address(new ERC20PresetFixedSupply("DAOVotes", "DAO", currentResult.maxPrice, address(this)));
             }
         }
 
@@ -328,15 +338,18 @@ contract DAODutchAuction is BN128, Encryption {
 
         // If bid invalid (amount greater than bidder maxPrice, maxPrice less than result max, or bidAmount greater than locked ETH)
         // Return all ETH
-        if (bidAmount > maxPrice || maxPrice < result.maxPrice || bidAmount > lockedEth[msg.sender]) {
+        if (bidAmount > maxPrice || maxPrice < result.maxPrice || bidAmount > ethRefund) {
             (bool success, ) = msg.sender.call{value: ethRefund}("");
             require(success, "Failed to send Ether");
         } else {
-            ethRefund = ethRefund * result.maxPrice / result.totalBid;
+            ethRefund = ethRefund - bidAmount * result.maxPrice / result.totalBid;
+            uint256 tokenShares = bidAmount * result.maxPrice / result.totalBid;
+
             (bool success, ) = msg.sender.call{value: ethRefund}("");
             require(success, "Failed to send Ether");
 
-            // Send ERC20
+            // Send votes tokens
+            ERC20PresetFixedSupply(votesToken).transfer(msg.sender, tokenShares);
         }
 
     }
