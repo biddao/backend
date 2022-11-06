@@ -85,3 +85,8 @@ If needed, this can be chained into multiple calls
 
 * setup environment `nix-shell` or install brownie
 * `cd brownie && brownie test`
+
+
+### References
+
+* [EthDKG](https://github.com/PhilippSchindler/EthDKG)
