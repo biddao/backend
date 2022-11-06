@@ -340,6 +340,15 @@ contract DAODutchAuction is BN128, Encryption {
         }
 
     }
+
+    function indexOfAuctioneers(address element) public view returns(uint) {
+        for (uint i = 0 ; i < auctioneers.length; i++) {
+            if (auctioneers[i] == element) {
+                return i;
+            }
+        }
+        return 2^256-1;
+    }
   
     // TODO: use challenge/response period instead
 }
