@@ -9,6 +9,9 @@ All bid information is encrypted with a shared key
 Upon reveal of the decryption key, the auction settles at the maximum valid clearing price
 
 
+Inspired by the [ConstitutionDAO](https://www.coindesk.com/tech/2021/11/19/constitutiondao-outbid-for-first-printing-of-americas-founding-document-in-sothebys-auction/)
+
+
 ## Improvement on existing auctions
 
 * <b>Optimized UX</b>
@@ -17,8 +20,6 @@ Upon reveal of the decryption key, the auction settles at the maximum valid clea
 * <b>Distributed key generation:</b> prevents auctioneer manipulation
 * <b>Max price threshold:</b> bidders can opt out if value exceeds a threshold they set
 * <b>Bid obfuscation:</b> values encrypted, concealed by additional contract-locked value</b>
-
-Inspired by the [ConstitutionDAO 2021 Sotheby's bid attempt](https://www.coindesk.com/tech/2021/11/19/constitutiondao-outbid-for-first-printing-of-americas-founding-document-in-sothebys-auction/)
 
 ### Auction Phases
 
@@ -89,4 +90,4 @@ If needed, this can be chained into multiple calls
 
 ### References
 
-* [EthDKG](https://github.com/PhilippSchindler/EthDKG)
+* [EthDKG](https://github.com/PhilippSchindler/EthDKG) - t-of-n distributed key generation
