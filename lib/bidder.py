@@ -182,9 +182,6 @@ def rank_bid_result(contract_address, bids: List[RevealedBid]) -> list[RevealedB
     realized_max_price = 0
 
     for bid in valid_bids:
-        print('bid max price', bid.max_price)
-        print('bid amount', bid.bid_amount)
-
         if realized_max_price and bid.max_price != realized_max_price:
             break
 

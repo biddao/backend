@@ -8,7 +8,7 @@ relative_build_dir = "../brownie/build/contracts"
 # TODO: move these instances to a central location
 web3 = Web3()
 
-CONTRACT_NAMES = ["DAODutchAuction"]
+CONTRACT_NAMES = ["DAODutchAuction", "TestERC20"]
 
 for name in CONTRACT_NAMES:
     artifact_path = os.path.join(script_dir, relative_build_dir, f"{name}.json")

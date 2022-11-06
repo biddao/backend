@@ -321,46 +321,40 @@ contract DAODutchAuction is BN128, Encryption {
 
     // Optional, withdraw to an address
     function withdraw() public {
+        withdrawTo(msg.sender);
+    }
+
+    function withdrawTo(address recipient) public {
         // TODO: If auctoin expired and masterPrivateKey doesn't match masterPublicKey, abort aucton. Let user withdraw all funds
         require(resultSubmitter != address(0), "Auction not final");
 
         Result memory result = results[resultSubmitter];
 
-        uint256 ethRefund = lockedEth[msg.sender];
+        uint256 ethRefund = lockedEth[recipient];
 
-        Bid memory userBid = bids[msg.sender];
+        Bid memory userBid = bids[recipient];
         require(userBid.bidderPublicKey[0] != 0, "Bid does not exist");
 
         (uint256 bidAmount, uint256 maxPrice) = _decryptBid(userBid);
 
         // Clear this out first
-        lockedEth[msg.sender] = 0;
+        lockedEth[recipient] = 0;
 
         // If bid invalid (amount greater than bidder maxPrice, maxPrice less than result max, or bidAmount greater than locked ETH)
         // Return all ETH
         if (bidAmount > maxPrice || maxPrice < result.maxPrice || bidAmount > ethRefund) {
-            (bool success, ) = msg.sender.call{value: ethRefund}("");
+            (bool success, ) = recipient.call{value: ethRefund}("");
             require(success, "Failed to send Ether");
         } else {
             ethRefund = ethRefund - bidAmount * result.maxPrice / result.totalBid;
             uint256 tokenShares = bidAmount * result.maxPrice / result.totalBid;
 
-            (bool success, ) = msg.sender.call{value: ethRefund}("");
+            (bool success, ) = recipient.call{value: ethRefund}("");
             require(success, "Failed to send Ether");
 
             // Send votes tokens
-            ERC20PresetFixedSupply(votesToken).transfer(msg.sender, tokenShares);
+            ERC20PresetFixedSupply(votesToken).transfer(recipient, tokenShares);
         }
-
-    }
-
-    function indexOfAuctioneers(address element) public view returns(uint) {
-        for (uint i = 0 ; i < auctioneers.length; i++) {
-            if (auctioneers[i] == element) {
-                return i;
-            }
-        }
-        return 2^256-1;
     }
   
     // TODO: use challenge/response period instead
